@@ -1,15 +1,25 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button.jsx";
 import { Input } from "@/components/ui/input.jsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.jsx";
 import { Checkbox } from "@/components/ui/checkbox.jsx";
 import { Badge } from "@/components/ui/badge.jsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select.jsx";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.jsx";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.jsx";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.jsx";
-import { Trash2, Plus, LogOut, CheckCircle2, Calendar, Clock, User, Filter } from "lucide-react";
+import {
+  Trash2,
+  Plus,
+  LogOut,
+  CheckCircle2,
+  Calendar,
+  Clock,
+  Filter,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast.js";
 import Profile from "./Profile";
+
+const API = "http://localhost:4000/api/todos";
 
 const TodoDashboard = ({ onLogout }) => {
   const [showProfile, setShowProfile] = useState(false);
@@ -19,76 +29,142 @@ const TodoDashboard = ({ onLogout }) => {
   const [newTodoPriority, setNewTodoPriority] = useState("medium");
   const [newTodoDueDate, setNewTodoDueDate] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+
   const { toast } = useToast();
 
-  const addTodo = (e) => {
+  // ---------------------------------------------------------------
+  // 1) LOAD TODOS FROM BACKEND (GET)
+  // ---------------------------------------------------------------
+  useEffect(() => {
+    fetch(API)
+      .then((res) => res.json())
+      .then((data) => setTodos(data))
+      .catch((err) => console.error("Error loading todos:", err));
+  }, []);
+
+  // ---------------------------------------------------------------
+  // 2) ADD TODO (POST)
+  // ---------------------------------------------------------------
+  const addTodo = async (e) => {
     e.preventDefault();
     if (!newTodo.trim()) return;
 
-    const todo = {
-      id: Date.now().toString(),
+    const todoData = {
       text: newTodo.trim(),
-      completed: false,
-      createdAt: new Date(),
-      dueDate: newTodoDueDate ? new Date(newTodoDueDate) : undefined,
-      priority: newTodoPriority,
       category: newTodoCategory,
+      priority: newTodoPriority,
+      due_date: newTodoDueDate || null,
     };
 
-    setTodos([todo, ...todos]);
-    setNewTodo("");
-    setNewTodoDueDate("");
-    toast({
-      title: "Task added!",
-      description: `Your new ${newTodoCategory} task has been added.`,
-    });
+    try {
+      const response = await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(todoData),
+      });
+
+      const newItem = await response.json();
+      setTodos([newItem, ...todos]);
+
+      setNewTodo("");
+      setNewTodoDueDate("");
+
+      toast({
+        title: "Task added!",
+        description: `Your ${newTodoCategory} task has been added.`,
+      });
+    } catch (err) {
+      console.error("Add error:", err);
+    }
   };
 
-  const toggleTodo = (id) => {
-    setTodos(todos.map(todo =>
-      todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    ));
+  // ---------------------------------------------------------------
+  // 3) TOGGLE TODO (PUT)
+  // ---------------------------------------------------------------
+  const toggleTodo = async (id) => {
+    const target = todos.find((t) => t.id === id);
+    if (!target) return;
+
+    try {
+      const response = await fetch(`${API}/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: !target.completed }),
+      });
+
+      const updated = await response.json();
+      setTodos(todos.map((t) => (t.id === id ? updated : t)));
+    } catch (err) {
+      console.error("Toggle error:", err);
+    }
   };
 
-  const deleteTodo = (id) => {
-    setTodos(todos.filter(todo => todo.id !== id));
-    toast({
-      title: "Task deleted",
-      description: "The task has been removed from your list.",
-    });
+  // ---------------------------------------------------------------
+  // 4) DELETE TODO (DELETE)
+  // ---------------------------------------------------------------
+  const deleteTodo = async (id) => {
+    try {
+      await fetch(`${API}/${id}`, { method: "DELETE" });
+
+      setTodos(todos.filter((t) => t.id !== id));
+
+      toast({
+        title: "Task deleted",
+        description: "The task has been removed.",
+      });
+    } catch (err) {
+      console.error("Delete error:", err);
+    }
   };
 
-  const filteredTodos = todos.filter(todo => {
+  // ---------------------------------------------------------------
+  // FILTERED LIST
+  // ---------------------------------------------------------------
+  const filteredTodos = todos.filter((todo) => {
     if (activeTab === "all") return true;
     if (activeTab === "daily") return todo.category === "daily";
     if (activeTab === "weekly") return todo.category === "weekly";
-    if (activeTab === "completed") return todo.completed;
     if (activeTab === "pending") return !todo.completed;
+    if (activeTab === "completed") return todo.completed;
     return true;
   });
 
-  const completedCount = todos.filter(todo => todo.completed).length;
+  const completedCount = todos.filter((t) => t.completed).length;
   const totalCount = todos.length;
-  const dailyCount = todos.filter(todo => todo.category === "daily").length;
-  const weeklyCount = todos.filter(todo => todo.category === "weekly").length;
+  const dailyCount = todos.filter((t) => t.category === "daily").length;
+  const weeklyCount = todos.filter((t) => t.category === "weekly").length;
 
   const formatDueDate = (date) => {
-    return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const d = new Date(date);
+    return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case "high": return "text-red-500 bg-red-50";
-      case "medium": return "text-yellow-600 bg-yellow-50";
-      case "low": return "text-green-600 bg-green-50";
-      default: return "text-gray-600 bg-gray-50";
+      case "high":
+        return "text-red-500 bg-red-50";
+      case "medium":
+        return "text-yellow-600 bg-yellow-50";
+      case "low":
+        return "text-green-600 bg-green-50";
+      default:
+        return "text-gray-600 bg-gray-50";
     }
   };
 
   if (showProfile) {
-    return <Profile onBack={() => setShowProfile(false)} completedTasks={completedCount} totalTasks={totalCount} />;
+    return (
+      <Profile
+        onBack={() => setShowProfile(false)}
+        completedTasks={completedCount}
+        totalTasks={totalCount}
+      />
+    );
   }
 
+  // ---------------------------------------------------------------
+  // UI STARTS HERE — unchanged
+  // ---------------------------------------------------------------
   return (
     <div className="min-h-screen p-6 bg-gradient-to-b from-background to-background/40">
       <div className="max-w-3xl mx-auto space-y-10">
@@ -123,7 +199,8 @@ const TodoDashboard = ({ onLogout }) => {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+          {/* Completed */}
+          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg rounded-xl">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                 <CheckCircle2 className="w-4 h-4" />
@@ -135,7 +212,8 @@ const TodoDashboard = ({ onLogout }) => {
             </CardContent>
           </Card>
 
-          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+          {/* Remaining */}
+          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg rounded-xl">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
                 <Plus className="w-4 h-4" />
@@ -147,7 +225,8 @@ const TodoDashboard = ({ onLogout }) => {
             </CardContent>
           </Card>
 
-          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+          {/* Daily */}
+          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg rounded-xl">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center text-green-500">
                 <Calendar className="w-4 h-4" />
@@ -159,7 +238,8 @@ const TodoDashboard = ({ onLogout }) => {
             </CardContent>
           </Card>
 
-          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+          {/* Weekly */}
+          <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg shadow-lg rounded-xl">
             <CardContent className="p-4 flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500">
                 <Clock className="w-4 h-4" />
@@ -172,7 +252,7 @@ const TodoDashboard = ({ onLogout }) => {
           </Card>
         </div>
 
-        {/* Add Todo Form */}
+        {/* Add Todo */}
         <Card className="border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg rounded-xl">
           <CardHeader>
             <CardTitle className="text-lg">Add New Task</CardTitle>
@@ -195,6 +275,7 @@ const TodoDashboard = ({ onLogout }) => {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Category */}
                 <div>
                   <label className="text-xs uppercase tracking-wide text-muted-foreground">
                     Category
@@ -211,6 +292,7 @@ const TodoDashboard = ({ onLogout }) => {
                   </Select>
                 </div>
 
+                {/* Priority */}
                 <div>
                   <label className="text-xs uppercase tracking-wide text-muted-foreground">
                     Priority
@@ -227,6 +309,7 @@ const TodoDashboard = ({ onLogout }) => {
                   </Select>
                 </div>
 
+                {/* Due Date */}
                 <div>
                   <label className="text-xs uppercase tracking-wide text-muted-foreground">
                     Due Date & Time
@@ -235,7 +318,6 @@ const TodoDashboard = ({ onLogout }) => {
                     type="datetime-local"
                     value={newTodoDueDate}
                     onChange={(e) => setNewTodoDueDate(e.target.value)}
-                    className="w-full"
                   />
                 </div>
               </div>
@@ -253,11 +335,21 @@ const TodoDashboard = ({ onLogout }) => {
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-5 bg-muted/20 rounded-xl p-1">
-                <TabsTrigger className="rounded-lg" value="all">All</TabsTrigger>
-                <TabsTrigger className="rounded-lg" value="daily">Daily</TabsTrigger>
-                <TabsTrigger className="rounded-lg" value="weekly">Weekly</TabsTrigger>
-                <TabsTrigger className="rounded-lg" value="pending">Pending</TabsTrigger>
-                <TabsTrigger className="rounded-lg" value="completed">Completed</TabsTrigger>
+                <TabsTrigger className="rounded-lg" value="all">
+                  All
+                </TabsTrigger>
+                <TabsTrigger className="rounded-lg" value="daily">
+                  Daily
+                </TabsTrigger>
+                <TabsTrigger className="rounded-lg" value="weekly">
+                  Weekly
+                </TabsTrigger>
+                <TabsTrigger className="rounded-lg" value="pending">
+                  Pending
+                </TabsTrigger>
+                <TabsTrigger className="rounded-lg" value="completed">
+                  Completed
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </CardHeader>
@@ -274,23 +366,28 @@ const TodoDashboard = ({ onLogout }) => {
                   key={todo.id}
                   className="flex items-start gap-4 p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur hover:bg-white/10 transition-all"
                 >
+                  {/* Checkbox */}
                   <Checkbox
                     checked={todo.completed}
                     onCheckedChange={() => toggleTodo(todo.id)}
                     className="mt-1 scale-110"
                   />
 
+                  {/* Text & info */}
                   <div className="flex-1 min-w-0">
                     <label
-                      className={`cursor-pointer block ${todo.completed ? "line-through text-muted-foreground" : "text-foreground"
-                        }`}
+                      className={`cursor-pointer block ${
+                        todo.completed ? "line-through text-muted-foreground" : "text-foreground"
+                      }`}
                     >
                       {todo.text}
                     </label>
 
                     <div className="flex items-center gap-2 mt-2">
                       <Badge
-                        className={`text-xs px-2 py-0.5 rounded-md border-none ${getPriorityColor(todo.priority)} bg-opacity-20`}
+                        className={`text-xs px-2 py-0.5 rounded-md border-none ${getPriorityColor(
+                          todo.priority
+                        )} bg-opacity-20`}
                       >
                         {todo.priority}
                       </Badge>
@@ -299,18 +396,21 @@ const TodoDashboard = ({ onLogout }) => {
                         {todo.category}
                       </Badge>
 
-                      {todo.dueDate && (
+                      {todo.due_date && (
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
                           <Clock className="w-3 h-3" />
-                          {formatDueDate(todo.dueDate)}
+                          {formatDueDate(todo.due_date)}
                         </div>
                       )}
                     </div>
                   </div>
 
+                  {/* Delete */}
                   <div className="flex items-center gap-2">
                     {todo.completed && (
-                      <Badge variant="secondary" className="text-xs">Done</Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        Done
+                      </Badge>
                     )}
 
                     <Button
@@ -330,7 +430,6 @@ const TodoDashboard = ({ onLogout }) => {
       </div>
     </div>
   );
-
 };
 
 export default TodoDashboard;
