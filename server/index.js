@@ -16,6 +16,14 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);     // Login & Signup
 app.use("/api/todos", todoRoutes);    // CRUD Todo Routes (protected)
 app.use("/uploads", express.static("uploads"));
+
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Vite frontend
+    credentials: true,
+  })
+);
+
 // Start server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
