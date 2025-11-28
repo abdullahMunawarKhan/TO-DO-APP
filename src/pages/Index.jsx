@@ -1,6 +1,6 @@
 import { useState } from "react";
-import Login from "@/components/Login";
-import TodoDashboard from "@/components/TodoDashboard";
+import Login from "./Login";
+import TodoDashboard from "./TodoDashboard";
 
 const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
